@@ -50,6 +50,7 @@ typedef struct threadflow {
 	int		tf_running;	/* Thread running indicator */
 	int		tf_abort;	/* Shutdown thread */
 	int		tf_utid;	/* Unique id for thread */
+	int 	tf_nid; 	/* Numa node to schedule the thread */
 	struct procflow	*tf_process;	/* Back pointer to process */
 	pthread_t	tf_tid;		/* Thread id */
 	pthread_mutex_t	tf_lock;	/* Mutex around threadflow */

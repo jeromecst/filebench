@@ -128,7 +128,7 @@ static void parser_enable_lathist(cmd_t *cmd);
 %token FSC_SYSTEM FSC_EVENTGEN FSC_ECHO FSC_RUN FSC_PSRUN FSC_VERSION FSC_ENABLE
 %token FSC_DOMULTISYNC
 
-%token FSV_STRING FSV_VAL_POSINT FSV_VAL_NEGINT FSV_VAL_BOOLEAN FSV_VARIABLE 
+%token FSV_STRING FSV_VAL_POSINT FSV_VAL_NEGINT FSV_VAL_BOOLEAN FSV_VARIABLE
 %token FSV_WHITESTRING FSV_RANDUNI FSV_RANDTAB FSV_URAND FSV_RAND48
 
 %token FSE_FILE FSE_FILES FSE_FILESET FSE_PROC FSE_THREAD FSE_FLOWOP FSE_CVAR
@@ -139,7 +139,7 @@ static void parser_enable_lathist(cmd_t *cmd);
 
 %token FSA_SIZE FSA_PREALLOC FSA_PARALLOC FSA_PATH FSA_REUSE
 %token FSA_MEMSIZE FSA_RATE FSA_READONLY FSA_TRUSTTREE
-%token FSA_IOSIZE FSA_FILENAME FSA_WSS FSA_NAME FSA_RANDOM FSA_INSTANCES
+%token FSA_IOSIZE FSA_FILENAME FSA_WSS FSA_NAME FSA_RANDOM FSA_INSTANCES FSA_NODE
 %token FSA_DSYNC FSA_TARGET FSA_ITERS FSA_NICE FSA_VALUE FSA_BLOCKING
 %token FSA_HIGHWATER FSA_DIRECTIO FSA_DIRWIDTH FSA_FD FSA_SRCFD FSA_ROTATEFD
 %token FSA_ENTRIES FSA_DIRDEPTHRV FSA_DIRGAMMA FSA_USEISM FSA_TYPE
@@ -757,7 +757,7 @@ fileset_attr_op: attrs_define_fileset FSK_ASSIGN attr_value
 	$$ = $3;
 	$$->attr_name = $1;
 }
-| attrs_define_fileset 
+| attrs_define_fileset
 {
 	$$ = alloc_attr();
 	if (!$$)
@@ -956,7 +956,7 @@ fo_attr_op: attrs_flowop FSK_ASSIGN attr_value
 	$$ = $3;
 	$$->attr_name = $1;
 }
-| attrs_flowop 
+| attrs_flowop
 {
 	if (($$ = alloc_attr()) == NULL)
 		YYERROR;
@@ -988,7 +988,7 @@ ev_attr_op: attrs_eventgen FSK_ASSIGN attr_value
 	$$ = $3;
 	$$->attr_name = $1;
 }
-| attrs_eventgen 
+| attrs_eventgen
 {
 	if (($$ = alloc_attr()) == NULL)
 		YYERROR;
@@ -1037,6 +1037,7 @@ attrs_define_proc:
 
 attrs_define_file:
   FSA_NAME { $$ = FSA_NAME;}
+| FSA_NODE { $$ = FSA_NODE;}
 | FSA_PATH { $$ = FSA_PATH;}
 | FSA_SIZE { $$ = FSA_SIZE;}
 | FSA_PREALLOC { $$ = FSA_PREALLOC;}
@@ -1048,6 +1049,7 @@ attrs_define_file:
 
 attrs_define_fileset:
   FSA_NAME { $$ = FSA_NAME;}
+| FSA_NODE { $$ = FSA_NODE;}
 | FSA_PATH { $$ = FSA_PATH;}
 | FSA_ENTRIES { $$ = FSA_ENTRIES;}
 | FSA_SIZE { $$ = FSA_SIZE;}
@@ -1102,6 +1104,7 @@ cvar_attr_name:
 
 attrs_define_thread:
   FSA_NAME { $$ = FSA_NAME;}
+| FSA_NODE { $$ = FSA_NODE;}
 | FSA_MEMSIZE { $$ = FSA_MEMSIZE;}
 | FSA_USEISM { $$ = FSA_USEISM;}
 | FSA_INSTANCES { $$ = FSA_INSTANCES;}
@@ -1931,7 +1934,7 @@ parser_thread_define(cmd_t *cmd, procflow_t *procflow)
 		template.tf_memsize = attr->attr_avd;
 	else /* XXX: really, memsize zero is default?.. */
 		template.tf_memsize = avd_int_alloc(0);
-	
+
 	attr = get_attr(cmd, FSA_IOPRIO);
 	if (attr)
 		template.tf_ioprio = attr->attr_avd;
@@ -1949,6 +1952,17 @@ parser_thread_define(cmd_t *cmd, procflow_t *procflow)
 	attr = get_attr(cmd, FSA_USEISM);
 	if (attr)
 		threadflow->tf_attrs |= THREADFLOW_USEISM;
+
+	attr = get_attr(cmd, FSA_NODE);
+	if (attr) {
+		if (numa_available() == -1) {
+			filebench_log(LOG_ERROR, "no numa in this machine, node ignored\n");
+			threadflow->tf_nid = -1;
+		}
+		threadflow->tf_nid = (int)avd_get_int(attr->attr_avd);
+	} else
+		threadflow->tf_nid = -1;
+
 
 	/* create the list of flowops */
 	for (inner_cmd = cmd->cmd_list; inner_cmd;
@@ -2392,6 +2406,16 @@ parser_fileset_define_common(cmd_t *cmd)
 	else
 		fileset->fs_size = avd_int_alloc(1024);
 
+	attr = get_attr(cmd, FSA_NODE);
+	if (attr) {
+		if (numa_available() == -1) {
+			filebench_log(LOG_ERROR, "no numa in this machine, node ignored\n");
+			fileset->fs_nid = -1;
+		}
+		fileset->fs_nid = (int)avd_get_int(attr->attr_avd);
+	} else
+		fileset->fs_nid = -1;
+
 	return fileset;
 }
 
@@ -2460,6 +2484,16 @@ parser_fileset_define(cmd_t *cmd)
 		fileset->fs_dirgamma = attr->attr_avd;
 	else
 		fileset->fs_dirgamma = avd_int_alloc(1500);
+
+	attr = get_attr(cmd, FSA_NODE);
+	if (attr) {
+		if (numa_available() == -1) {
+			filebench_log(LOG_ERROR, "no numa in this machine, node ignored\n");
+			fileset->fs_nid = -1;
+		}
+		fileset->fs_nid = (int)avd_get_int(attr->attr_avd);
+	} else
+		fileset->fs_nid = -1;
 }
 
 /*
@@ -2472,7 +2506,7 @@ parser_fileset_create(cmd_t *cmd)
 {
 	int ret;
 
-	ret = fileset_createsets(); 
+	ret = fileset_createsets();
 	if (ret) {
 		filebench_log(LOG_ERROR, "Failed to create filesets");
 		filebench_shutdown(1);

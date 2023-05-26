@@ -53,6 +53,7 @@ typedef struct filesetentry {
 	struct fileset		*fse_fileset;	/* Parent fileset */
 	char			*fse_path;
 	int			fse_depth;
+	int			fse_nid; /* Numa node of the fliesetentry */
 	off64_t			fse_size;
 	int			fse_open_cnt;	/* protected by fs_pick_lock */
 	int			fse_flags;	/* protected by fs_pick_lock */
@@ -90,6 +91,7 @@ typedef struct fileset {
 					    /* attr */
 	avd_t		fs_preallocpercent; /* Prealloc size */
 	int		fs_attrs;	/* Attributes */
+	int		fs_nid; 		/* Numa node where fileset should be located */
 	avd_t		fs_dirwidth;	/* Explicit or mean for distribution */
 	avd_t		fs_dirdepthrv;	/* random variable for dir depth */
 	avd_t		fs_size;	/* Explicit or mean for distribution */
