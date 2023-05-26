@@ -21,9 +21,10 @@ filebench_SOURCES = eventgen.c fb_avl.c fb_localfs.c \
 
 EXTRA_DIST = LICENSE
 
+AM_LDFLAGS = -lnuma
 ACLOCAL_AMFLAGS = -I m4
 AM_YFLAGS = -d
-#AM_LDFLAGS = 
+#AM_LDFLAGS =
 if GCC_USED
 AM_CFLAGS = -Wall -Wno-unknown-pragmas
 endif
