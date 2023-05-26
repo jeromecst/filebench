@@ -26,11 +26,13 @@
  */
 
 #include <fcntl.h>
+#include <numa.h>
 #include <pthread.h>
 #include <errno.h>
 #include <math.h>
 #include <libgen.h>
 #include <sys/mman.h>
+#include <sys/param.h>
 #include <sys/shm.h>
 
 #include "filebench.h"
@@ -283,6 +285,7 @@ fileset_alloc_file(filesetentry_t *entry)
 	fb_fdesc_t fdesc;
 	int trust_tree;
 	int fs_readonly;
+	int nid;
 
 	fileset = entry->fse_fileset;
 	(void) fb_strlcpy(path, avd_get_str(fileset->fs_path), MAXPATHLEN);
@@ -296,7 +299,7 @@ fileset_alloc_file(filesetentry_t *entry)
 
 	/* see if fileset is readonly */
 	fs_readonly = avd_get_bool(fileset->fs_readonly) == TRUE;
-	
+
 	/* see if reusing and this file exists */
 	trust_tree = avd_get_bool(fileset->fs_trust_tree);
 	if ((entry->fse_flags & FSE_REUSING) && (trust_tree ||
@@ -353,6 +356,12 @@ fileset_alloc_file(filesetentry_t *entry)
 		return (FILEBENCH_ERROR);
 	}
 
+	if (entry->fse_nid > -1)
+		nid = entry->fse_nid;
+	else
+		nid = fileset->fs_nid;
+
+	numa_run_on_node(nid);
 	for (seek = 0; seek < entry->fse_size; ) {
 		off64_t wsize;
 		int ret = 0;
@@ -371,10 +380,12 @@ fileset_alloc_file(filesetentry_t *entry)
 			(void) FB_CLOSE(&fdesc);
 			free(buf);
 			fileset_unbusy(entry, TRUE, FALSE, 0);
+			numa_run_on_node(-1);
 			return (FILEBENCH_ERROR);
 		}
 		seek += wsize;
 	}
+	numa_run_on_node(-1);
 
 	(void) FB_CLOSE(&fdesc);
 
@@ -479,10 +490,10 @@ fileset_openfile(fb_fdesc_t *fdesc, fileset_t *fileset,
 	/* Disable read ahead with the help of fadvise, if asked for */
 	if (attrs & FLOW_ATTR_FADV_RANDOM) {
 #ifdef HAVE_FADVISE
-		if (posix_fadvise(fdesc->fd_num, 0, 0, POSIX_FADV_RANDOM) 
+		if (posix_fadvise(fdesc->fd_num, 0, 0, POSIX_FADV_RANDOM)
 			!= FILEBENCH_OK) {
 			filebench_log(LOG_ERROR,
-				"Failed to disable read ahead for file %s, with status %s", 
+				"Failed to disable read ahead for file %s, with status %s",
 			    	path, strerror(errno));
 			fileset_unbusy(entry, FALSE, FALSE, 0);
 			return (FILEBENCH_ERROR);
@@ -1759,7 +1770,7 @@ fileset_createsets()
 	int ret = 0;
 
 	if (filecreate_done) {
-		/* XXX: what if user defines a fileset after create? 
+		/* XXX: what if user defines a fileset after create?
  		* IMHO, we should have filecreate_done flag per fileset */
 		filebench_log(LOG_INFO,
 		    "Attempting to create fileset more than once, ignoring");
