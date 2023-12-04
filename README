@@ -2,6 +2,27 @@ Filebench - A Model Based File System Workload Generator
 ========================================================
 
 
+ABOUT THIS FORK
+---------------
+
+This fork adds support for NUMA architectures. A keyword has been added to the
+model language. A NUMA "node" can be specified when defining a fileset, a thread
+or a process.
+
+In the case of threads and processes, the "node" keywords refers to the NUMA
+node where the initial placement of the tasks takes place. They are bind to
+the node, and no later migration is possible during the benchmarks.
+
+When defining a "node" for a fileset, it will allocate the page cache on the
+specified node.
+
+The node option can therefore be used to simulate complex setup on a NUMA
+architecture. Note that "prealloc" is needed for fileset, otherwise there will be
+no pre allocation on the specified node, and the later allocation could be made
+on another node.
+
+See example below for a NUMA workload.
+
 INTRODUCTION
 ------------
 
@@ -22,6 +43,8 @@ Filebench compilation and installation is simple, and can be completed in two
 steps. However, if you have downloaded a release tarball from Github
 (https://github.com/filebench/filebench/releases), you can go ahead and skip to
 Step 2.
+
+The libnuma-dev package is required to compile this version.
 
 
 Step 1: Generating autotool scripts
@@ -53,7 +76,7 @@ QUICK-START GUIDE
 To quickly introduce a new user to Filebench we use two examples demonstrating
 two different typical Filebench workflows: 1) describe a user-defined workload
 in Workload Model Language (WML) and generate the workload; 2) generate one of
-the predefined Filebench workloads. 
+the predefined Filebench workloads.
 The description in this guide assumes Filebench 1.5-alpha1 or higher.
 
 
@@ -126,6 +149,53 @@ $ filebench -f mywebserver.f
 
 An extended discussion on how to scale Filebench workloads can be found at
 https://github.com/filebench/filebench/wiki/Scaling-Filebench-workloads
+
+Example 3: NUMA Workload
+
+set $dir=/tmp
+set $filesize=2g
+set $iosize=10m
+
+define fileset name=bigfile0,path=$dir,size=$filesize,prealloc,node=0,dirwidth=20,entries=5,reuse
+define fileset name=bigfile1,path=$dir,size=$filesize,prealloc,node=1,dirwidth=20,entries=5,reuse
+define fileset name=bigfile2,path=$dir,size=$filesize,prealloc,node=2,dirwidth=20,entries=5,reuse
+define fileset name=bigfile3,path=$dir,size=$filesize,prealloc,node=3,dirwidth=20,entries=5,reuse
+
+define process name=filereader3,instances=1
+{
+  thread name=filereaderthread,memsize=300m,instances=10,node=0
+  {
+    flowop read name=write-file,filesetname=bigfile3,random,iosize=$iosize
+  }
+}
+
+define process name=filereader2,instances=1
+{
+  thread name=filereaderthread,memsize=300m,instances=10,node=3
+  {
+    flowop read name=write-file,filesetname=bigfile2,random,iosize=$iosize
+  }
+}
+
+define process name=filereader1,instances=1
+{
+  thread name=filereaderthread,memsize=300m,instances=10,node=2
+  {
+    flowop read name=write-file,filesetname=bigfile1,random,iosize=$iosize
+  }
+}
+
+define process name=filereader0,instances=1
+{
+  thread name=filereaderthread,memsize=300m,instances=10,node=1
+  {
+    flowop read name=write-file,filesetname=bigfile0,random,iosize=$iosize
+  }
+}
+
+echo  "FileMicro-ReadRand Version 2.2 personality successfully loaded"
+psrun -1 30
+
 
 
 SUPPORT
